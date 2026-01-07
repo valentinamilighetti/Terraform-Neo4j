@@ -2,13 +2,13 @@
 ## Introduzione
 Questo progetto implementa un’infrastruttura **Infrastructure as Code (IaC)** per il deploy automatizzato di un database a grafo **Neo4j** su un cluster **Kubernetes**.  
 L’obiettivo è automatizzare la configurazione e la distribuzione dell’applicazione utilizzando il software **Terraform**.
-## Prerequisiti
-- openssh-server per l'accesso in remoto e chiavi SSH
-- Kubernetes
 ## Cluster 
 Il cluster Kubernetes è costituito da due macchine virtuali Lubuntu 24 connesse tramite una rete con NAT gestita da VirtualBox (`192.168.43.0/24`):
 - nodo 1 (**master**): `192.168.43.10`
 - nodo 2 (**worker**): `192.168.43.11`
+## Prerequisiti
+- openssh-server per l'accesso in remoto e chiavi SSH
+- Kubernetes
 ## Installazione di Terraform
 Sul nodo master, eseguire i seguenti comandi:
 ```bash
