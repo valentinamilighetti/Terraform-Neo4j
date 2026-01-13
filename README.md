@@ -22,162 +22,15 @@ sudo apt update && sudo apt install terraform
 Il deploy dell’infrastruttura è gestito tramite Terraform, che utilizza file .tf per descrivere in modo dichiarativo le risorse da creare su Kubernetes.
 
 Di seguito sono descritti i principali file utilizzati nel progetto.
-- [`variables.tf`](src/variables.tf) definisce la struttura e le proprietà delle variabili utilizzate:
-    ```bash
-    variable "namespace" {
-        description = "Namespace Kubernetes per Neo4j"
-        type        = string
-        default     = "neo4j-app"
-    }
-
-    variable "neo4j_password" {
-        description = "Password per l'utente Neo4j"
-        type        = string
-        sensitive   = true
-        default     = "*****"
-    }
-
-    variable "neo4j_storage" {
-        description = "Dimensione dello storage (PVC) per Neo4j"
-        type        = string
-        default     = "10Gi"
-    }
-
-    variable "worker_node_name" {
-        description = "Nome del nodo worker dove montare i dati"
-        type        = string
-        default     = "node2" 
-    }
-    ```
+- [`variables.tf`](src/variables.tf) definisce la struttura e le proprietà delle variabili utilizzate
 - [`terraform.tfvars`](src/terraform.tfvars): contiene i valori assegnati alle variabili utilizzate per parametrizzare il deploy
-    ```bash
-    worker_node_name = "node2"
-    namespace        = "neo4j-app"
-    neo4j_password   = "*****"  
-    neo4j_storage    = "10Gi"
-    ```
-- [`providers.tf`](src/providers.tf): definisce i requisiti di Terraform e configura il provider Kubernetes utilizzato per interagire con il cluster.
-    ```bash
-    terraform {
-        required_version = ">= 1.0"
-        
-        required_providers {
-            kubernetes = {
-            source  = "hashicorp/kubernetes"
-            version = "~> 2.27"
-            }
-        }
-    }
-
-    provider "kubernetes" {
-        config_path = "~/.kube/config"
-    }
-    ```
+- [`providers.tf`](src/providers.tf): definisce i requisiti di Terraform e configura il provider Kubernetes utilizzato per interagire con il cluster
 - [`namespace.tf`](src/namespace.tf): definisce il namespace Kubernetes dedicato al deploy dell’applicazione Neo4j.
-    ```bash
-    resource "kubernetes_namespace" "neo4j_ns" {
-        metadata {
-            name = var.namespace
-        }
-    }
-    ```
-- [`secrets.tf`](src/secrets.tf): definisce il Secret Kubernetes utilizzato per gestire in modo sicuro le credenziali di accesso al database Neo4j.
-    ```bash
-    resource "kubernetes_secret" "neo4j_credentials" {
-        metadata {
-            name      = "neo4j-auth-secret"
-            namespace = var.namespace
-        }
-
-        data = {
-            auth_string = "neo4j/${var.neo4j_password}"
-        }
-
-        type = "Opaque"
-    
-        depends_on = [kubernetes_namespace.neo4j_ns]
-    }
-    ```
-- [`storage.tf`](src/storage.tf): definisce le risorse di storage persistente necessarie al funzionamento di Neo4j, configurando una StorageClass e un PersistentVolume per la memorizzazione dei dati.
-    ```bash
-    resource "kubernetes_storage_class" "manual" {
-        metadata {
-            name = "manual"
-        }
-        storage_provisioner = "kubernetes.io/no-provisioner"
-        volume_binding_mode = "WaitForFirstConsumer"
-    }
-
-    resource "kubernetes_persistent_volume" "neo4j_pv" {
-        metadata {
-            name = "neo4j-pv"
-        }
-        spec {
-            capacity = {
-                storage = "20Gi" 
-            }
-            
-            access_modes = ["ReadWriteOnce"]
-            
-            persistent_volume_source {
-                host_path {
-                    path = "/mnt/data/neo4j"
-                    type = "DirectoryOrCreate"
-                }
-            }
-            
-            storage_class_name = kubernetes_storage_class.manual.metadata[0].name
-            
-            node_affinity {
-                required {
-                    node_selector_term {
-                        match_expressions {
-                            key      = "kubernetes.io/hostname"
-                            operator = "In"
-                            values   = [var.worker_node_name]
-                        }
-                    }
-                }
-            }
-        }
-        
-        depends_on = [kubernetes_namespace.neo4j_ns]
-    }
-    ```
-    Lo storage viene vincolato al nodo worker specificato tramite `node_affinity`, garantendo che i dati persistenti di Neo4j risiedano sul nodo corretto.
-- [`neo4j-statefulset.tf`](src/neo4j-statefulset.tf): definisce lo **StatefulSet Kubernetes** responsabile del deploy del database Neo4j, configurando il pod, le risorse, le variabili d’ambiente e il collegamento allo storage persistente.
-- [`neo4j-service.tf`](src/neo4j-service.tf): definisce il **Service Kubernetes** che espone il database Neo4j all’interno del cluster e verso l’esterno tramite NodePort.
-    ```bash
-    resource "kubernetes_service" "neo4j" {
-        metadata {
-            name      = "neo4j"
-            namespace = var.namespace
-        }
-
-        spec {
-            selector = {
-                app = "neo4j"
-            }
-
-            port {
-                name        = "http"
-                port        = 7474
-                target_port = 7474
-                node_port   = 30074  
-            }
-
-            port { 
-                name = "bolt" port = 7687 
-                target_port = 7687 
-                node_port = 30687 
-            }
-
-            type = "NodePort" 
-        }
-    
-        depends_on = [kubernetes_namespace.neo4j_ns]
-    }
-    ```
+- [`secrets.tf`](src/secrets.tf): definisce il Secret Kubernetes utilizzato per gestire in modo sicuro le credenziali di accesso al database Neo4j
+- [`storage.tf`](src/storage.tf): definisce le risorse di storage persistente necessarie al funzionamento di Neo4j, configurando una StorageClass e un PersistentVolume per la memorizzazione dei dati
+Lo storage viene vincolato al nodo worker specificato tramite `node_affinity`, garantendo che i dati persistenti di Neo4j risiedano sul nodo corretto
+- [`neo4j-statefulset.tf`](src/neo4j-statefulset.tf): definisce lo **StatefulSet Kubernetes** responsabile del deploy del database Neo4j, configurando il pod, le risorse, le variabili d’ambiente e il collegamento allo storage persistente
+- [`neo4j-service.tf`](src/neo4j-service.tf): definisce il **Service Kubernetes** che espone il database Neo4j all’interno del cluster e verso l’esterno tramite NodePort
 ### Deploy
 1. Preparazione del nodo worker: 
    ```bash
@@ -224,4 +77,10 @@ MATCH (s:Supplier {supplierID: row.supplierID})
 MERGE (s)-[:SUPPLIES]->(p);
 ```
 ### Esempio di Cypher query 
+La seguente query ricerca l'intera filiera di fornitura per la categoria 'Seafood':
+```cypher
+MATCH path = (s:Supplier)-[:SUPPLIES]->(p:Product)-[:PART_OF]->(c:Category {categoryName: 'Seafood'})
+RETURN path
+```
 ![esempio di query](img/query.png)
+La figura mostra il grafo risultante, che visualizza il percorso completo (path) che connette i nodi Supplier ai nodi Product, fino al nodo Category di destinazione.
